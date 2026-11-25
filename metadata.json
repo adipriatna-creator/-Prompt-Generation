@@ -1,0 +1,8 @@
+{
+  "name": "VIDEO TO PROMPT AI",
+  "description": "Ubah Video Menjadi Prompt Detail dengan Kecerdasan AI. Analisis komprehensif visual, audio, dialog, pergerakan kamera, dan adegan timeline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

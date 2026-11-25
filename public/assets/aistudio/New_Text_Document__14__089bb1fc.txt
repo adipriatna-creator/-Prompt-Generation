@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIDEO TO PROMPT - Multimodal Video Analysis Engine</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                            glow: '#00f2fe'
+                        },
+                        darkbg: '#050b14',
+                        glass: 'rgba(15, 23, 42, 0.75)',
+                        borderglass: 'rgba(59, 130, 246, 0.2)'
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glow-pulse': 'glowPulse 2s infinite alternate',
+                    },
+                    keyframes: {
+                        glowPulse: {
+                            '0%': { boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)' },
+                            '100%': { boxShadow: '0 0 35px rgba(0, 242, 254, 0.6)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Font Inter & Lucide Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #030712;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(30, 58, 138, 0.25) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
+                radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.6) 0px, transparent 100%);
+            background-attachment: fixed;
+            color: #f8fafc;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+        .glass-card-hover:hover {
+            border-color: rgba(96, 165, 250, 0.5);
+            box-shadow: 0 10px 40px 0 rgba(0, 102, 255, 0.2);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(5, 11, 20, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(59, 130, 246, 0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 right-5 z-50 transform translate-y-[-150%] opacity-0 transition-all duration-300 ease-in-out flex items-center space-x-3 bg-slate-900/90 border border-brand-500 text-white px-5 py-3.5 rounded-xl shadow-2xl backdrop-blur-md">
+        <i id="toast-icon" data-lucide="check-circle" class="w-5 h-5 text-brand-400"></i>
+        <span id="toast-message" class="text-sm font-medium">Notifikasi</span>
+    </div>
+
+    <!-- API Key Settings Modal -->
+    <div id="api-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card max-w-md w-full rounded-2xl p-6 shadow-2xl border border-brand-500/30">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="key" class="w-5 h-5 text-brand-400"></i>
+                    <h3 class="text-lg font-bold text-white">Pengaturan Gemini API Key</h3>
+                </div>
+                <button onclick="toggleApiModal(false)" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-slate-300 text-sm mb-4 leading-relaxed">
+                Aplikasi ini menggunakan model Gemini 3 Flash yang sangat akurat untuk menganalisis audio & video. Kunci API Anda disimpan dengan aman hanya di memori browser lokal Anda.
+            </p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Gemini API Key</label>
+                    <input type="password" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-slate-950/80 border border-slate-700 focus:border-brand-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 font-mono">
+                </div>
+                <div class="text-xs text-slate-400 flex items-center justify-between">
+                    <span>Belum punya key?</span>
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-brand-400 hover:underline flex items-center space-x-1">
+                        <span>Dapatkan di Google AI Studio</span>
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                    </a>
+                </div>
+                <button onclick="saveApiKey()" class="w-full py-3 bg-gradient-to-r from-brand-600 to-blue-500 hover:from-brand-500 hover:to-blue-400 text-white font-semibold rounded-xl shadow-lg transition duration-200">
+                    Simpan & Lanjutkan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <div class="w-full max-w-6xl mx-auto px-4 py-6 flex-grow flex flex-col space-y-8">
+
+        <!-- HEADER SECTION -->
+        <header class="text-center space-y-4 pt-4">
+            <div class="inline-flex items-center space-x-3 bg-brand-950/60 border border-brand-500/30 px-4 py-2 rounded-full backdrop-blur-md shadow-inner">
+                <div class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-500"></span>
+                </div>
+                <span class="text-xs font-medium tracking-wide text-brand-400 uppercase">Created BY: Faisal Adi Priatna</span>
+            </div>
+
+            <div class="flex items-center justify-center space-x-3">
+                <div class="p-3 bg-gradient-to-tr from-brand-600 to-cyan-400 rounded-2xl shadow-lg shadow-brand-500/20">
+                    <i data-lucide="video" class="w-8 h-8 text-white"></i>
+                </div>
+                <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-brand-400">
+                    VIDEO TO PROMPT AI
+                </h1>
+            </div>
+
+            <p class="text-slate-400 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
+                Ubah Video Menjadi Prompt Detail dengan Kecerdasan AI. Analisis komprehensif visual, audio, dialog, pergerakan kamera, dan adegan timeline.
+            </p>
+
+            <div class="flex justify-center pt-1">
+                <button onclick="toggleApiModal(true)" class="inline-flex items-center space-x-2 text-xs text-slate-400 hover:text-brand-400 bg-slate-900/50 border border-slate-800 hover:border-brand-500/40 px-3 py-1.5 rounded-lg transition">
+                    <i data-lucide="key" class="w-3.5 h-3.5"></i>
+                    <span id="api-status-text">Set API Key</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTENT LAYOUT -->
+        <main class="space-y-8">
+
+            <!-- UPLOAD & PREVIEW SECTION -->
+            <section class="glass-card rounded-3xl p-6 md:p-8 shadow-2xl transition duration-300">
+                <div id="upload-zone" class="border-2 border-dashed border-brand-500/30 hover:border-brand-400/70 rounded-2xl p-6 md:p-12 text-center flex flex-col items-center justify-center space-y-4 cursor-pointer transition duration-300 bg-slate-900/30 hover:bg-slate-900/50 group">
+                    <input type="file" id="video-input" accept="video/mp4,video/mov,video/webm,video/quicktime,video/x-matroska" class="hidden" onchange="handleFileSelect(event)">
+                    
+                    <div class="p-4 bg-brand-950/80 text-brand-400 rounded-2xl group-hover:scale-110 group-hover:bg-brand-600 group-hover:text-white transition duration-300 border border-brand-500/20">
+                        <i data-lucide="upload-cloud" class="w-10 h-10"></i>
+                    </div>
+
+                    <div class="space-y-1">
+                        <h3 class="text-lg font-bold text-white group-hover:text-brand-400 transition">Klik untuk unggah atau seret file video ke sini</h3>
+                        <p class="text-xs md:text-sm text-slate-400">Mendukung format MP4, MOV, WEBM (Maksimal diperiksa hingga 100MB untuk kecepatan terbaik)</p>
+                    </div>
+
+                    <div class="pt-2 text-xs text-slate-500 max-w-xl">
+                        Unggah video yang ingin Anda analisis. AI akan mempelajari seluruh detail visual dan audio untuk menghasilkan prompt yang sangat akurat.
+                    </div>
+                </div>
+
+                <!-- PREVIEW CONTAINER (HIDDEN INITIALLY) -->
+                <div id="preview-container" class="hidden space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                        <!-- Video Player -->
+                        <div class="md:col-span-2 relative rounded-2xl overflow-hidden bg-black border border-slate-800 shadow-xl group">
+                            <video id="video-preview" controls class="w-full h-auto max-h-[420px] object-contain rounded-2xl"></video>
+                        </div>
+
+                        <!-- Video Metadata & Options -->
+                        <div class="glass-card rounded-2xl p-5 space-y-4 border border-slate-800">
+                            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                                <h4 class="font-semibold text-white text-sm flex items-center space-x-2">
+                                    <i data-lucide="info" class="w-4 h-4 text-brand-400"></i>
+                                    <span>Informasi Video</span>
+                                </h4>
+                                <button onclick="removeVideo()" class="text-red-400 hover:text-red-300 text-xs flex items-center space-x-1 bg-red-950/40 hover:bg-red-900/60 px-2.5 py-1 rounded-lg border border-red-800/30 transition">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    <span>Hapus</span>
+                                </button>
+                            </div>
+
+                            <div class="space-y-2 text-xs">
+                                <div class="flex justify-between py-1 border-b border-slate-800/50">
+                                    <span class="text-slate-400">Nama File:</span>
+                                    <span id="meta-name" class="text-slate-200 font-mono truncate max-w-[150px]">-</span>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-slate-800/50">
+                                    <span class="text-slate-400">Ukuran File:</span>
+                                    <span id="meta-size" class="text-slate-200 font-mono">-</span>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-slate-800/50">
+                                    <span class="text-slate-400">Durasi:</span>
+                                    <span id="meta-duration" class="text-slate-200 font-mono">-</span>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-slate-800/50">
+                                    <span class="text-slate-400">Resolusi:</span>
+                                    <span id="meta-resolution" class="text-slate-200 font-mono">-</span>
+                                </div>
+                            </div>
+
+                            <div class="pt-2">
+                                <div class="p-3 bg-brand-950/40 rounded-xl border border-brand-500/20 text-xs text-brand-300 space-y-1">
+                                    <p class="font-medium flex items-center space-x-1">
+                                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-400"></i>
+                                        <span>Siap Diproses</span>
+                                    </p>
+                                    <p class="text-slate-400">Visual frame & trek audio akan diuji secara serentak.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GENERATE BUTTON -->
+                    <div class="pt-2">
+                        <button id="btn-generate" onclick="startVideoAnalysis()" class="w-full py-4 bg-gradient-to-r from-brand-600 via-blue-600 to-cyan-500 hover:from-brand-500 hover:to-cyan-400 text-white font-bold text-lg rounded-2xl shadow-xl hover:shadow-brand-500/25 transition duration-300 flex items-center justify-center space-x-3 tracking-wide">
+                            <i data-lucide="sparkles" class="w-6 h-6"></i>
+                            <span>GENERATE PROMPT</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PROGRESS & LOADING SECTION -->
+            <section id="loading-section" class="hidden glass-card rounded-3xl p-8 md:p-12 text-center space-y-6 animate-pulse-slow">
+                <div class="relative w-24 h-24 mx-auto flex items-center justify-center">
+                    <div class="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                    <div class="absolute inset-0 rounded-full border-4 border-brand-400 border-t-transparent animate-spin"></div>
+                    <i data-lucide="cpu" class="w-10 h-10 text-brand-400 animate-pulse"></i>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="text-xl font-bold text-white">Menganalisis Video dengan AI</h3>
+                    <p id="loading-status-text" class="text-brand-400 font-medium text-sm md:text-base font-mono">
+                        Mengunggah video...
+                    </p>
+                </div>
+
+                <!-- Progress indicator bar -->
+                <div class="max-w-md mx-auto bg-slate-950/80 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                    <div id="loading-bar" class="bg-gradient-to-r from-brand-600 to-cyan-400 h-full w-0 transition-all duration-500"></div>
+                </div>
+            </section>
+
+            <!-- RESULT SECTION -->
+            <section id="result-section" class="hidden space-y-6">
+                <!-- Top Result Bar -->
+                <div class="glass-card rounded-2xl p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-white">HASIL PROMPT VIDEO</h3>
+                            <p class="text-xs text-slate-400">Analisis komprehensif selesai. Prompt siap digunakan untuk AI Generator.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                        <button onclick="copyMasterPrompt()" class="px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-md transition">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                            <span>Salin Master Prompt</span>
+                        </button>
+                        <button onclick="copyAllResults()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition">
+                            <i data-lucide="file-text" class="w-4 h-4"></i>
+                            <span>Salin Semua Hasil</span>
+                        </button>
+                        <button onclick="downloadTXT()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            <span>Unduh TXT</span>
+                        </button>
+                        <button onclick="reAnalyze()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span>Analisis Ulang</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SINGLE COLUMN COMPREHENSIVE OUTPUT -->
+                <div class="glass-card rounded-3xl p-6 md:p-8 space-y-6">
+                    
+                    <!-- MASTER PROMPT BOX (PRIMARY) -->
+                    <div class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-brand-500/40 rounded-2xl p-6 shadow-2xl relative overflow-hidden group">
+                        <div class="absolute top-0 right-0 bg-brand-600 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-bl-xl shadow-md">
+                            MASTER PROMPT SIAP GENERATE
+                        </div>
+                        <div class="flex items-center space-x-2 text-brand-400 mb-3">
+                            <i data-lucide="zap" class="w-5 h-5"></i>
+                            <h4 class="font-bold text-white text-base">MASTER PROMPT SIAP GENERATE</h4>
+                        </div>
+                        <div class="relative">
+                            <textarea id="master-prompt-text" readonly class="w-full h-64 bg-slate-950/90 border border-slate-800 rounded-xl p-4 text-slate-200 font-mono text-sm leading-relaxed focus:outline-none focus:border-brand-500/50 resize-y selection:bg-brand-600 selection:text-white" placeholder="Master prompt akan muncul di sini..."></textarea>
+                            <button onclick="copyMasterPrompt()" class="absolute top-3 right-3 bg-brand-600/80 hover:bg-brand-500 text-white p-2 rounded-lg text-xs font-medium transition backdrop-blur-sm" title="Salin Master Prompt">
+                                <i data-lucide="copy" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- FULL DETAILED ANALYSIS BREAKDOWN (SINGLE COLUMN) -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                            <h4 class="text-base font-bold text-white flex items-center space-x-2">
+                                <i data-lucide="layers" class="w-5 h-5 text-brand-400"></i>
+                                <span>RINCIAN DETAIL HASIL ANALISIS</span>
+                            </h4>
+                            <span class="text-xs text-slate-400 font-mono">14 Kategori Teridentifikasi</span>
+                        </div>
+
+                        <!-- Main Detailed Text Area -->
+                        <div class="relative">
+                            <textarea id="full-analysis-text" readonly class="w-full h-[600px] bg-slate-950/70 border border-slate-800 rounded-xl p-5 text-slate-300 font-mono text-sm leading-relaxed focus:outline-none focus:border-brand-500/50 resize-y" placeholder="Rincian lengkap analisis akan ditampilkan di sini..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- BOTTOM ACTIONS -->
+                    <div class="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800">
+                        <button onclick="deleteResults()" class="text-slate-400 hover:text-red-400 text-xs font-medium flex items-center space-x-1.5 transition">
+                            <i data-lucide="trash" class="w-4 h-4"></i>
+                            <span>Hapus Hasil Analisis</span>
+                        </button>
+                        <div class="flex space-x-3">
+                            <button onclick="copyAllResults()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 transition">
+                                <i data-lucide="copy" class="w-4 h-4"></i>
+                                <span>Salin Semua Rincian</span>
+                            </button>
+                            <button onclick="copyMasterPrompt()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-lg shadow-brand-600/30 transition">
+                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                <span>Salin Master Prompt</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="text-center py-6 border-t border-slate-900 text-xs text-slate-500 space-y-2">
+            <p>© 2026 VIDEO TO PROMPT AI. Professional Video Prompt Generation Engine.</p>
+            <p class="text-slate-600">Preserving absolute video details, character consistency, dialogs, and timing accuracy.</p>
+        </footer>
+
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // App State
+        let currentFile = null;
+        let apiKey = localStorage.getItem('GEMINI_API_KEY') || '';
+        let generatedMasterPrompt = '';
+        let generatedFullAnalysis = '';
+
+        // UI Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            updateApiStatusUI();
+            setupDragAndDrop();
+        });
+
+        // API Key Management
+        function toggleApiModal(show) {
+            const modal = document.getElementById('api-modal');
+            if (show) {
+                document.getElementById('api-key-input').value = apiKey;
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function saveApiKey() {
+            const inputKey = document.getElementById('api-key-input').value.trim();
+            if (!inputKey) {
+                showToast('Silakan masukkan API Key Gemini yang valid.', 'error');
+                return;
+            }
+            apiKey = inputKey;
+            localStorage.setItem('GEMINI_API_KEY', apiKey);
+            updateApiStatusUI();
+            toggleApiModal(false);
+            showToast('API Key berhasil disimpan!', 'success');
+        }
+
+        function updateApiStatusUI() {
+            const statusText = document.getElementById('api-status-text');
+            if (apiKey) {
+                statusText.innerText = 'API Key Terpasang';
+                statusText.classList.add('text-emerald-400');
+            } else {
+                statusText.innerText = 'Set Gemini API Key';
+                statusText.classList.remove('text-emerald-400');
+            }
+        }
+
+        // Drag and Drop Handling
+        function setupDragAndDrop() {
+            const zone = document.getElementById('upload-zone');
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                zone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                zone.addEventListener(eventName, () => zone.classList.add('border-brand-400', 'bg-slate-900/70'), false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                zone.addEventListener(eventName, () => zone.classList.remove('border-brand-400', 'bg-slate-900/70'), false);
+            });
+
+            zone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    processFile(files[0]);
+                }
+            });
+
+            zone.addEventListener('click', () => {
+                document.getElementById('video-input').click();
+            });
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+
+        function processFile(file) {
+            if (!file.type.startsWith('video/')) {
+                showToast('Format video tidak didukung. Harap unggah file video.', 'error');
+                return;
+            }
+
+            currentFile = file;
+
+            // Render Preview
+            const videoUrl = URL.createObjectURL(file);
+            const videoEl = document.getElementById('video-preview');
+            videoEl.src = videoUrl;
+
+            // Metadata updates
+            document.getElementById('meta-name').innerText = file.name;
+            document.getElementById('meta-size').innerText = formatBytes(file.size);
+
+            videoEl.onloadedmetadata = () => {
+                const duration = formatDuration(videoEl.duration);
+                document.getElementById('meta-duration').innerText = duration;
+                document.getElementById('meta-resolution').innerText = `${videoEl.videoWidth} x ${videoEl.videoHeight}`;
+            };
+
+            // Switch Views
+            document.getElementById('upload-zone').classList.add('hidden');
+            document.getElementById('preview-container').classList.remove('hidden');
+            document.getElementById('result-section').classList.add('hidden');
+            showToast('Video berhasil diunggah!', 'success');
+        }
+
+        function removeVideo() {
+            currentFile = null;
+            const videoEl = document.getElementById('video-preview');
+            videoEl.pause();
+            videoEl.src = '';
+            
+            document.getElementById('upload-zone').classList.remove('hidden');
+            document.getElementById('preview-container').classList.add('hidden');
+            document.getElementById('result-section').classList.add('hidden');
+            document.getElementById('loading-section').classList.add('hidden');
+            document.getElementById('video-input').value = '';
+        }
+
+        // Helpers
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatDuration(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMessage.innerText = message;
+            
+            if (type === 'error') {
+                toastIcon.setAttribute('data-lucide', 'alert-circle');
+                toast.classList.remove('border-brand-500');
+                toast.classList.add('border-red-500');
+            } else {
+                toastIcon.setAttribute('data-lucide', 'check-circle');
+                toast.classList.remove('border-red-500');
+                toast.classList.add('border-brand-500');
+            }
+            lucide.createIcons();
+
+            toast.classList.remove('translate-y-[-150%]', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-[-150%]', 'opacity-0');
+            }, 3500);
+        }
+
+        // Step-by-Step Loading Animation Messages
+        const loadingSteps = [
+            "Mengunggah video ke AI Engine...",
+            "Menganalisis setiap adegan & pergerakan...",
+            "Mendeteksi karakter, pakaian, dan objek...",
+            "Menganalisis gerakan tubuh & gestur...",
+            "Menganalisis ekspresi wajah & emosi...",
+            "Mendeteksi dialog dan percakapan audio...",
+            "Menganalisis suara latar & efek lingkungan...",
+            "Mengidentifikasi pergerakan & sudut kamera...",
+            "Menyusun urutan adegan berdasarkan timeline...",
+            "Menyusun prompt detail akhir..."
+        ];
+
+        let loadingInterval = null;
+
+        function startLoadingAnimation() {
+            document.getElementById('loading-section').classList.remove('hidden');
+            // PASTIKAN preview video tidak disembunyikan agar pengguna tetap bisa melihat video yang diunggah
+            document.getElementById('preview-container').classList.remove('hidden');
+            
+            let stepIndex = 0;
+            const statusText = document.getElementById('loading-status-text');
+            const loadingBar = document.getElementById('loading-bar');
+            
+            statusText.innerText = loadingSteps[0];
+            loadingBar.style.width = '10%';
+
+            loadingInterval = setInterval(() => {
+                stepIndex++;
+                if (stepIndex < loadingSteps.length) {
+                    statusText.innerText = loadingSteps[stepIndex];
+                    loadingBar.style.width = `${((stepIndex + 1) / loadingSteps.length) * 90}%`;
+                }
+            }, 2500);
+        }
+
+        function stopLoadingAnimation() {
+            if (loadingInterval) clearInterval(loadingInterval);
+            document.getElementById('loading-bar').style.width = '100%';
+            setTimeout(() => {
+                document.getElementById('loading-section').classList.add('hidden');
+            }, 500);
+        }
+
+        // Base64 Converter for File API fallback / Gemini inlineData
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64String = reader.result.split(',')[1];
+                    resolve(base64String);
+                };
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // MAIN VIDEO ANALYSIS FUNCTION (GEMINI API INTEGRATION)
+        async function startVideoAnalysis() {
+            if (!currentFile) {
+                showToast('Silakan unggah video terlebih dahulu.', 'error');
+                return;
+            }
+
+            // Fallback API Key check
+            let activeKey = apiKey || "";
+            if (!activeKey) {
+                toggleApiModal(true);
+                showToast('Harap masukkan Gemini API Key Anda untuk melanjutkan.', 'error');
+                return;
+            }
+
+            startLoadingAnimation();
+
+            try {
+                // Convert video to Base64 (Supports Gemini Multimodal inlineData)
+                const base64Video = await fileToBase64(currentFile);
+                const mimeType = currentFile.type || 'video/mp4';
+
+                // Construct Prompt System Instructions
+                const systemInstruction = `Anda adalah sistem Video to Prompt AI tingkat ahli yang memproses video multimodal (visual + audio).
+Tugas utama Anda adalah membuat prompt video yang SANGAT AKURAT, PRESISI, SANGAT DETAIL, dan SEDEKAT MUNGKIN DENGAN VIDEO ASLI.
+
+SANGAT PENTING (ATURAN KETAT):
+1. SELURUH HASIL HARUS DIDOKUMENTASIKAN DAN DIJELASKAN DALAM BAHASA INDONESIA SECARA PENUH DAN TERKUNCI.
+2. DILARANG MENGGUNAKAN SIMBOL FORMATTING BOLD BERUPA DUA BINTANG ("**") DI BAGIAN MANAPUN DARI TEKS HASIL. Tulis teks biasa atau huruf kapital tanpa bintik dua bintang.
+3. Video Asli = Referensi Utama. JANGAN mengarang, menambah, atau mengurangi fakta.
+4. Analisis trek AUDIO asli: Transkripsikan dialog kata-per-kata tanpa mengubah kata asli. Jika ada percakapan, tuliskan persis seperti di audio beserta intonasi dan karakternya. Jika tidak jelas, tulis [dialog tidak terdengar jelas].
+5. Pembagian adegan harus berurutan berdasarkan TIMELINE asli (cth: 00:00-00:03, dst).
+
+SUSUNAN OUTPUT WAJIB TERSTRUKTUR SEPERTI BERIKUT:
+
+=== RINCIAN ANALISIS DETAIL ===
+1. DESKRIPSI UTAMA VIDEO: (Ringkasan lengkap isi video dalam bahasa Indonesia)
+2. DESKRIPSI KARAKTER: (Jumlah, usia, gender, bentuk wajah, kulit, rambut, pakaian, posisi)
+3. DESKRIPSI LOKASI DAN LATAR BELAKANG: (Lokasi, interior/eksterior, dinding, perabotan, objek, pencahayaan)
+4. DETAIL PAKAIAN DAN OBJEK: (Model pakaian, warna, bahan, aksesori, benda sekitar)
+5. URUTAN ADEGAN BERDASARKAN TIMELINE: (Pembagian urutan adegan berdasarkan waktu sebenarnya dari detik awal sampai akhir)
+6. DETAIL GERAKAN TUBUH: (Gerakan kepala, mata, tangan, gestur, cara berjalan, atau interaksi)
+7. DETAIL EKSPRESI WAJAH: (Tersenyum, serius, terkejut, perubahan emosi)
+8. DIALOG LENGKAP SETIAP KARAKTER: (Transkripsi percakapan persis sesuai audio. Format: Karakter A: "..." / Karakter B: "...")
+9. DETAIL SUARA DAN MUSIK: (Efek suara, musik latar, intonasi, karakteristik suara, lingkungan)
+10. DETAIL PERGERAKAN KAMERA: (Shot type, pan, tilt, zoom, static, angle, tracking)
+11. PENCAHAYAAN DAN WARNA: (Sumber cahaya, bayangan, color temperature, tone warna)
+12. DETAIL TEKNIS VIDEO: (Rasio aspek, estimasi resolusi, lighting style, fps)
+13. INSTRUKSI KONSISTENSI KARAKTER: (Instruksi menjaga konsistensi visual untuk generator AI)
+14. INSTRUKSI HASIL AKHIR VIDEO: (Petunjuk gaya rendering akhir)
+
+=== MASTER PROMPT SIAP GENERATE ===
+Di bagian ini, buat SATU PROMPT UTUH BERBENTUK NARASI PARAGRAF PANJANG, RAPI, LENGKAP, DAN MENGALIR DALAM BAHASA INDONESIA.
+
+ATURAN STRUKTUR DAN TATAAN NARASI MASTER PROMPT:
+- JANGAN gunakan format poin, daftar, tabel, atau label seperti A, B, C atau [STYLE], [CAMERA].
+- JANGAN gunakan dua bintang (**) sama sekali.
+- Susun narasi dalam paragraf-paragraf yang saling terhubung dengan jarak antarparagraf yang rapi:
+  1. Paragraf Pembuka: Mulai dengan deskripsi jenis video, gaya visual (misal sinematik realistis), rasio aspek (misal 9:16 atau 16:9), dan gambaran umum adegan.
+  2. Deskripsi Lokasi & Latar: Narasi detail mengenai gedung, ruangan, pencahayaan, dekorasi, lantai, dan latar belakang.
+  3. Deskripsi Karakter & Aktivitas: Narasi detail tentang orang/karakter, pakaian, posisi, gestur, dan aktivitas mereka.
+  4. Bagian Dialog (Wajib jika ada percakapan dalam audio): Berikan judul persis "DIALOG YANG DIUCAPKAN:" di baris tersendiri, diikuti baris dialog per karakter (contoh: Karakter 1: "..." / Karakter 2: "..."). Jangan mengarang dialog.
+  5. Deskripsi Gerakan & Pergerakan Kamera: Narasi pergerakan kamera (zoom, pan, wide, close-up), sudut pandang, dan urutan gerakan kejadian secara runtut.
+  6. Paragraf Penutup: Instruksi kualitas visual akhir, gerakan manusia natural, konsistensi karakter, detail tajam, dan kualitas HD 4K.`;
+
+                const promptQuery = "Analisis video ini secara menyeluruh dari awal hingga akhir, baik visual maupun audio. Hasilkan prompt video super detail sesuai instruksi dalam Bahasa Indonesia tanpa simbol bintik dua bintang (**).";
+                // Call Gemini 3 Flash Endpoint
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${activeKey}`;
+
+                const payload = {
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: promptQuery },
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType,
+                                        data: base64Video
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    systemInstruction: {
+                        parts: [{ text: systemInstruction }]
+                    }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error?.message || `HTTP error status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const textOutput = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!textOutput) {
+                    throw new Error("Gagal mengambil teks hasil analisis dari AI Gemini.");
+                }
+
+                // Process and parse Output
+                parseAndDisplayResult(textOutput);
+                stopLoadingAnimation();
+                showToast('Analisis video berhasil dilakukan!', 'success');
+
+            } catch (error) {
+                stopLoadingAnimation();
+                console.error("Gemini Analysis Error:", error);
+                
+                // Show file backup option or specific error handling
+                if (error.message.includes('API key')) {
+                    showToast("API Key tidak valid atau habis masa berlaku.", "error");
+                    toggleApiModal(true);
+                } else if (error.message.includes('audio') || error.message.includes('sound')) {
+                    showToast("Audio tidak berhasil dianalisis secara penuh. Prompt visual tetap dapat dibuat.", "error");
+                } else {
+                    showToast(`Koneksi AI sedang bermasalah atau file terlalu besar. (${error.message})`, "error");
+                }
+                
+                // Restore preview container
+                document.getElementById('preview-container').classList.remove('hidden');
+            }
+        }
+
+        // Parse Output text into Master Prompt & Detailed Categories
+        function parseAndDisplayResult(fullText) {
+            // Sanitize text to remove any remaining double-asterisk Markdown bolding
+            const cleanText = fullText.replace(/\*\*/g, '');
+
+            let masterPrompt = "";
+            let fullAnalysis = cleanText;
+
+            if (cleanText.includes("=== MASTER PROMPT SIAP GENERATE ===")) {
+                const parts = cleanText.split("=== MASTER PROMPT SIAP GENERATE ===");
+                fullAnalysis = parts[0].replace("=== RINCIAN ANALISIS DETAIL ===", "").trim();
+                masterPrompt = parts[1].trim();
+            } else {
+                masterPrompt = cleanText;
+            }
+
+            generatedMasterPrompt = masterPrompt;
+            generatedFullAnalysis = fullAnalysis;
+
+            document.getElementById('master-prompt-text').value = masterPrompt;
+            document.getElementById('full-analysis-text').value = fullAnalysis;
+
+            document.getElementById('result-section').classList.remove('hidden');
+            document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Clipboard & Utility Actions
+        function copyMasterPrompt() {
+            if (!generatedMasterPrompt) return;
+            copyToClipboard(generatedMasterPrompt);
+            showToast('Prompt berhasil disalin!');
+        }
+
+        function copyAllResults() {
+            const combined = `=== RINCIAN HASIL ANALISIS VIDEO ===\n\n${generatedFullAnalysis}\n\n=== MASTER PROMPT SIAP GENERATE ===\n\n${generatedMasterPrompt}`;
+            copyToClipboard(combined);
+            showToast('Seluruh hasil analisis berhasil disalin!');
+        }
+
+        function copyToClipboard(text) {
+            // Using document.execCommand('copy') directly as navigator.clipboard.writeText is restricted in iframe preview environments
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            // Prevent scrolling to bottom
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (!successful) {
+                    console.warn('execCommand copy fallback was unsuccessful');
+                }
+            } catch (err) {
+                console.error('Copy to clipboard failed:', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function downloadTXT() {
+            const filename = `VIDEO_PROMPT_ANALYSIS_${Date.now()}.txt`;
+            const content = `==================================================
+VIDEO TO PROMPT AI - HASIL ANALISIS VIDEO LENGKAP
+==================================================
+
+=== MASTER PROMPT SIAP GENERATE ===
+${generatedMasterPrompt}
+
+==================================================
+=== RINCIAN DETAIL ANALISIS (14 KATEGORI) ===
+==================================================
+${generatedFullAnalysis}
+`;
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('File TXT berhasil diunduh!');
+        }
+
+        function reAnalyze() {
+            if (currentFile) {
+                startVideoAnalysis();
+            } else {
+                showToast('Tidak ada video untuk dianalisis ulang.', 'error');
+            }
+        }
+
+        function deleteResults() {
+            document.getElementById('result-section').classList.add('hidden');
+            document.getElementById('preview-container').classList.remove('hidden');
+            generatedMasterPrompt = '';
+            generatedFullAnalysis = '';
+            showToast('Hasil analisis telah dihapus.');
+        }
+    </script>
+</body>
+</html>
